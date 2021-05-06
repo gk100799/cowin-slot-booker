@@ -6,6 +6,14 @@ import moment from 'moment';
 
 import './App.css'
 
+// const script = () => {
+//   document.querySelector('#mat-input-0').value = 7406058845;
+//   document.querySelector('#main-content > app-login > ion-content > div > ion-grid > ion-row > ion-col > ion-grid > ion-row > ion-col:nth-child(1) > ion-grid > form > ion-row > ion-col.col-padding.md.hydrated > div > ion-button').click();
+//   document.querySelector('#main-content > app-login > ion-content > div > ion-grid > ion-row > ion-col > ion-grid > ion-row > ion-col > ion-grid > form > ion-row > ion-col:nth-child(3) > div > ion-button').addEventListener('click', otpEnteringPage)
+//   document.querySelector('#main-content > app-login > ion-content > div > ion-grid > ion-row > ion-col > ion-grid > ion-row > ion-col > ion-grid > form > ion-row > ion-col:nth-child(3) > div > ion-button').click();
+// }
+
+
 const cowinUrl = 'https://cdn-api.co-vin.in/api/v2';
 
 const blacklistCenters = [421758];
@@ -25,6 +33,7 @@ function App() {
   const [token, setToken] = useState('');
   const [slotsArray, setSlotsArray] = useState<any>([]);
   const [districtId, setDistrictId] = useState(294);
+  const [expiryTime, setExpiryTime] = useState<any>('');
 
   let date = moment(new Date()).format('DD-MM-YYYY');
 
@@ -33,6 +42,7 @@ function App() {
       clearTimeout(timer)
     }
     setOtp('');
+    setToken('');
     axios.post(cowinUrl + '/auth/public/generateOTP', {
       mobile: phoneNumber
     }).then((res: any) => {
@@ -50,6 +60,7 @@ function App() {
       otp: encryptedOtp
     }).then(res => {
       setToken(res.data.token);
+      setExpiryTime(moment(new Date()).add(15, 'minutes').format('hh:mm:ss'));
       setTimeout(() => {
         getOtp()
       }, 900000);
@@ -57,14 +68,18 @@ function App() {
   }
 
   const getSlots = () => {
-    axios.get(cowinUrl + `/appointment/sessions/public/calendarByDistrict?district_id=${districtId}&date=${date}`)
+    axios.get(cowinUrl + `/appointment/sessions/calendarByDistrict?district_id=${districtId}&date=${date}`, {
+      headers: {
+        // Authoroization: `Bearer ${token}`
+      }
+    })
     .then((res: any) => {
       let centers = res.data.centers;
       centers.forEach((center: any) => {
         if (!blacklistCenters.includes(center.center_id)) {
             center.sessions.forEach((session: any) => {
                 if (session.min_age_limit === 18) {
-                    if (session.available_capacity > 0) {
+                    if (session.available_capacity >= 2) {
                       bookSlot({ session, center })
                       setSlotsArray([...slotsArray, { center, session }]);
                     }
@@ -74,15 +89,17 @@ function App() {
     });
     })
   }
-
+  // currently not used
   const isTokenExpired = (token: any) => {
     let decodedToken: any = jwt_decode(token)
     var dateNow = new Date();
-    return decodedToken.exp > dateNow.getTime()/1000;
+    return decodedToken.exp < dateNow.getTime()/1000;
   }
 
   const bookSlot = (slot: any) => {
-    if (isTokenExpired(token)) {
+    console.log("In bookSlot")
+    console.log(!isTokenExpired(token))
+    if (token) {
       axios.post(cowinUrl + '/appointment/schedule', {
         dose: '1',
         session_id: slot.session.session_id,
@@ -113,7 +130,7 @@ function App() {
     // }, 900000)
     slotsInterval = setInterval(() => {
       getSlots()
-    }, 20000)
+    }, 4000)
     return () => {
       clearInterval(otpInterval)
       clearInterval(slotsInterval)
@@ -124,7 +141,7 @@ function App() {
     <div className="">
       <div className='otp-section'>
         <input type="number" value={phoneNumber} onChange={(e: any) => setPhoneNumber(e.target.value)} />
-        <button onClick={getOtp}>Get OTP</button>
+        <button onClick={getOtp}>Get OTP</button> (Expiry: {expiryTime})
       </div>
       <div className='otp-section'>
         <input type="number" value={otp} onChange={(e: any) => setOtp(e.target.value)}/>
